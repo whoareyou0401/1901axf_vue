@@ -1,9 +1,15 @@
 import datetime
+import uuid
 
+import requests
 import shortuuid
+import xmltodict
+from rest_framework.decorators import action
 from rest_framework.generics import CreateAPIView, ListCreateAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+from rest_framework.viewsets import ViewSet
+
 from .serializers import OrderSerializer
 from .auth import LoginAuthentication
 from .models import *
@@ -81,3 +87,72 @@ class OrderAPI(ListCreateAPIView):
             "detail": serializer.data
         }
         return Response({"data": result})
+
+
+def sign(params, sign_key):
+    params = [(str(key), str(val)) for key, val in params.items() if val]
+    sorted_params_string = '&'.join('='.join(pair) for pair in sorted(params))
+    sign_str = "{}&key={}".format(sorted_params_string, sign_key).encode("utf-8")
+    md5 = hashlib.md5()
+    md5.update(sign_str)
+    return md5.hexdigest().upper()
+
+def xml_response_to_dict(rep):
+    d = xmltodict.parse(rep.content.decode())
+    return dict(d['xml'])
+
+class ConfirmOrder(ViewSet):
+
+    authentication_classes = [LoginAuthentication]
+    @action(methods=["post"], detail=False)
+    def confirm(self, request):
+        user = request.user
+        id = request.data.get("id")
+        order = Order.objects.get(id=id)
+        sum_money = 0
+        for i in order.orderitems.all():
+            sum_money += (i.num * i.final_price)
+        # 发起支付了
+        # 获取IP
+        if request.META.get('HTTP_X_FORWARDED_FOR'):
+            ip = request.META.get('HTTP_X_FORWARDED_FOR')
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+
+        nonce_str = str(uuid.uuid4()).replace("-", "")
+        out_trade_no = order.number
+        url = 'https://api.mch.weixin.qq.com/pay/unifiedorder'
+        body = "axf".encode("utf-8")
+        data = {}
+        data["body"] = body
+        data["appid"] = "wxxxxxxxx91a808f"
+        data["nonce_str"] = nonce_str
+        data["mch_id"] = "1xxxxxxxxx6702"
+        data["out_trade_no"] = out_trade_no[:32]
+        data["total_fee"] = sum_money
+        data["spbill_create_ip"] = ip
+        data["notify_url"] = "http://sharemsg.cn:12346/axf/notice"
+        data["trade_type"] = "MWEB"
+        data["scene_info"] = """{"h5_info": {"type":"Wap","wap_url": "https://sharemsg.cn","wap_name": "hehe"}}"""
+        data["sign"] = sign(data, "sssssss")
+        template = """
+                            <xml>
+                            <appid>{appid}</appid>
+                            <body>{body}</body>
+                            <mch_id>{mch_id}</mch_id>
+                            <nonce_str>{nonce_str}</nonce_str>
+                            <notify_url>{notify_url}</notify_url>
+                            <out_trade_no>{out_trade_no}</out_trade_no>
+                            <spbill_create_ip>{spbill_create_ip}</spbill_create_ip>
+                            <total_fee>{total_fee}</total_fee>
+                            <trade_type>{trade_type}</trade_type>
+                            <scene_info>{scene_info}</scene_info>
+                            <sign>{sign}</sign>
+                            </xml>
+                        """
+        content = template.format(**data)
+        headers = {'Content-Type': 'application/xml'}
+        raw = requests.post(url, data=content, headers=headers)
+        rdict = xml_response_to_dict(raw)
+        print(rdict)
+        return Response({})
