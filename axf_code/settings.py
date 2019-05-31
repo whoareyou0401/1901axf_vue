@@ -23,7 +23,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '+bst^y*v(6h*upw2l$a#nlp(9o*ff$13uste!-**=^*69rwps_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
@@ -82,8 +82,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': "1901axf",
-        'USER': os.environ.get("DB_USER"),
-        'PASSWORD': os.environ.get('DB_PWD'),
+        'USER': "root",
+        'PASSWORD': "root",
         'HOST': '127.0.0.1',
         'PORT': 3306
     }
@@ -130,7 +130,7 @@ STATIC_URL = '/static/'
 
 
 CORS_ORIGIN_WHITELIST = [
-    "http://sharemsg.cn:12346"
+    "http://sharemsg.cn:12346", "http:axf.sharemsg.cn"
 ]
 CORS_ALLOW_METHODS = (
     'DELETE',
